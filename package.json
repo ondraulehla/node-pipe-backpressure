@@ -1,0 +1,17 @@
+{
+    "name": "node-pipe-backpressure",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Measured: what happens to an awaited write to a child process when the child dies before the write is flushed",
+    "scripts": {
+        "threshold": "node src/threshold.mjs",
+        "hang": "node src/hang.mjs",
+        "report": "node src/report.mjs"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "license": "MIT",
+    "author": "Ondřej Úlehla"
+}

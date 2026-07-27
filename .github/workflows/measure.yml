@@ -1,0 +1,26 @@
+name: measure
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+    # Monthly, so the numbers in the README do not quietly go stale as Node changes.
+    schedule:
+        - cron: '0 6 1 * *'
+
+jobs:
+    measure:
+        name: ${{ matrix.os }} / node ${{ matrix.node }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+                node: [20, 22, 24]
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: ${{ matrix.node }}
+            # Writes the markdown row to the job summary as well as stdout.
+            - run: node src/report.mjs
