@@ -10,18 +10,18 @@ Two things caught me out.
 
 **A promise that only waits for `'drain'` is never settled when the child exits.** The exit destroys the pipe, and a destroyed stream does not emit `'drain'`, so the await sits there for the lifetime of the process. No error, no timeout, and the listener stays attached to a stream that can never fire again. I let it run for 15 seconds with `destroyed === true` before accepting that "slow" was the wrong word for it.
 
-**The size at which a write starts being buffered is not a constant.** It is 16 KB on Windows and somewhere between 160 KB and 224 KB on Linux depending on the Node version. Code that never sees the buffered path on one platform hits it routinely on another, which is a nasty way for a bug to hide.
+**The size at which a write starts being buffered is not a constant.** It ranges from 16 KB to 224 KB across the nine platform and version combinations below, a factor of fourteen. Code that never reaches the buffered path on one platform hits it routinely on another, which is a nasty way for a bug to hide.
 
-| platform | node | writableHighWaterMark | first size that backpressures |
-| --- | --- | --- | --- |
-| win32 | 24.18 | 16384 | 16 KB |
-| linux | 24.14 | 65536 | 160 KB |
-| linux | 22.22 | 65536 | 160 KB |
-| linux | 20.20 | 16384 | 224 KB |
+| platform | writableHighWaterMark | first size that backpressures | | |
+| --- | --- | --- | --- | --- |
+| | | node 20.20.2 | node 22.23.1 | node 24.18.0 |
+| win32 | 16384 on all three | 16 KB | 16 KB | 16 KB |
+| darwin | 16384, then 65536 | 16 KB | 64 KB | 64 KB |
+| linux | 16384, then 65536 | 224 KB | 160 KB | 160 KB |
 
-Note the last two columns do not track each other. Windows on Node 24 and Linux on Node 20 report the same high water mark and then differ by a factor of fourteen in the size that actually starts buffering, because libuv hands part of the chunk to the OS synchronously before Node queues the remainder. So the threshold is a property of the platform's pipe behaviour, not of the JavaScript-level buffer setting, and reading `writableHighWaterMark` tells you less than you would hope.
+Two things stand out. The high water mark grew from 16 KB to 64 KB between Node 20 and 22 on Linux and macOS, but not on Windows, so a payload size that is safely unbuffered on one runtime is buffered on the next. And the mark only predicts the threshold on two of the three platforms: on Windows and macOS the first size that backpressures is exactly the mark, while on Linux it is 2.5 times the mark on Node 22 and 24 and fourteen times it on Node 20, because the Linux pipe absorbs a large part of the chunk synchronously before Node has to queue anything. Reading `writableHighWaterMark` therefore tells you less than you would hope.
 
-Those are my own runs. The workflow in this repo measures the same table on ubuntu, macOS and Windows for Node 20, 22 and 24, so the macOS row comes from CI rather than from me.
+Every number here comes from the workflow in this repo, which runs the same two scripts on ubuntu, macOS and Windows for Node 20, 22 and 24. The sizes are the first entry in a coarse ladder (4, 8, 16, 32, 48, 64, 96, 128, 160, 192, 224, 256 and 512 KB), so the true boundary sits between the listed size and the one before it.
 
 ## Why I was looking
 
@@ -53,14 +53,14 @@ That went upstream as [modelcontextprotocol/typescript-sdk#2552](https://github.
 
 ## What the measurements show
 
-`src/hang.mjs` runs three scenarios against a real child process with 8 MB in flight, which is past every threshold above:
+`src/hang.mjs` runs four scenarios against a real child process with 8 MB in flight, which is past every threshold above. The result is identical on all nine platform and version combinations:
 
 | scenario | drain-only send | write-callback send |
 | --- | --- | --- |
-| child exits mid write | pending forever, 1 leaked `'drain'` listener | rejects with `EPIPE` on Linux and `EOF` on Windows, no leak |
-| child is slow, then reads | resolves | resolves |
+| child exits mid write | pending forever, 1 leaked `'drain'` listener | rejects, `EPIPE` on Linux and macOS, `EOF` on Windows, no leak |
+| child is slow, then starts reading | resolves | resolves |
 
-The third row is the one that keeps the fix honest. A peer that is merely slow must still resolve, otherwise the cure is worse than the disease.
+The second row is the one that keeps the fix honest. A peer that is merely slow must still resolve, otherwise the cure is worse than the disease, and both shapes have to agree on that.
 
 ## Run it yourself
 
