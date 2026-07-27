@@ -12,12 +12,17 @@ Two things caught me out.
 
 **The size at which a write starts being buffered is not a constant.** It ranges from 16 KB to 224 KB across the nine platform and version combinations below, a factor of fourteen. Code that never reaches the buffered path on one platform hits it routinely on another, which is a nasty way for a bug to hide.
 
-| platform | writableHighWaterMark | first size that backpressures | | |
-| --- | --- | --- | --- | --- |
-| | | node 20.20.2 | node 22.23.1 | node 24.18.0 |
-| win32 | 16384 on all three | 16 KB | 16 KB | 16 KB |
-| darwin | 16384, then 65536 | 16 KB | 64 KB | 64 KB |
-| linux | 16384, then 65536 | 224 KB | 160 KB | 160 KB |
+| platform | node | writableHighWaterMark | first size that backpressures |
+| --- | --- | --- | --- |
+| linux | 20.20.2 | 16384 | 224 KB |
+| linux | 22.23.1 | 65536 | 160 KB |
+| linux | 24.18.0 | 65536 | 160 KB |
+| darwin | 20.20.2 | 16384 | 16 KB |
+| darwin | 22.23.1 | 65536 | 64 KB |
+| darwin | 24.18.0 | 65536 | 64 KB |
+| win32 | 20.20.2 | 16384 | 16 KB |
+| win32 | 22.23.1 | 16384 | 16 KB |
+| win32 | 24.18.0 | 16384 | 16 KB |
 
 Two things stand out. The high water mark grew from 16 KB to 64 KB between Node 20 and 22 on Linux and macOS, but not on Windows, so a payload size that is safely unbuffered on one runtime is buffered on the next. And the mark only predicts the threshold on two of the three platforms: on Windows and macOS the first size that backpressures is exactly the mark, while on Linux it is 2.5 times the mark on Node 22 and 24 and fourteen times it on Node 20, because the Linux pipe absorbs a large part of the chunk synchronously before Node has to queue anything. Reading `writableHighWaterMark` therefore tells you less than you would hope.
 
