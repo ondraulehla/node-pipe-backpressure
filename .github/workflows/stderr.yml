@@ -1,0 +1,42 @@
+name: stderr-backpressure
+
+on:
+    workflow_dispatch:
+    push:
+        paths:
+            - src/stderr-backpressure.mjs
+            - .github/workflows/stderr.yml
+
+jobs:
+    piped:
+        name: ${{ matrix.os }} / stderr is a pipe
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+            # stderr goes to the runner's pipe, which is the case this measures.
+            - run: node src/stderr-backpressure.mjs
+
+    pty:
+        name: ${{ matrix.os }} / stderr is a tty
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest]
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+            # CI has no terminal, so borrow one from script(1) to get a real tty on stderr.
+            - if: runner.os == 'Linux'
+              run: script -q -e -c "node src/stderr-backpressure.mjs" /dev/null
+            - if: runner.os == 'macOS'
+              run: script -q /dev/null node src/stderr-backpressure.mjs
