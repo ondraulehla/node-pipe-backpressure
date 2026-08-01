@@ -8,9 +8,10 @@ on:
             - .github/workflows/stderr.yml
 
 jobs:
-    piped:
-        name: ${{ matrix.os }} / stderr is a pipe
+    measure:
+        name: ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
+        timeout-minutes: 10
         strategy:
             fail-fast: false
             matrix:
@@ -20,23 +21,15 @@ jobs:
             - uses: actions/setup-node@v6
               with:
                   node-version: 24
-            # stderr goes to the runner's pipe, which is the case this measures.
-            - run: node src/stderr-backpressure.mjs
 
-    pty:
-        name: ${{ matrix.os }} / stderr is a tty
-        runs-on: ${{ matrix.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [ubuntu-latest, macos-latest]
-        steps:
-            - uses: actions/checkout@v7
-            - uses: actions/setup-node@v6
-              with:
-                  node-version: 24
-            # CI has no terminal, so borrow one from script(1) to get a real tty on stderr.
-            - if: runner.os == 'Linux'
+            # stderr is a pipe read by the runner, which is what CI and `| tee` look like.
+            - name: stderr is a pipe
+              run: node src/stderr-backpressure.mjs
+
+            # A real tty on stderr, borrowed from script(1). There is no equivalent here for Windows.
+            - name: stderr is a tty
+              if: runner.os == 'Linux'
               run: script -q -e -c "node src/stderr-backpressure.mjs" /dev/null
-            - if: runner.os == 'macOS'
+            - name: stderr is a tty
+              if: runner.os == 'macOS'
               run: script -q /dev/null node src/stderr-backpressure.mjs
