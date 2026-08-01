@@ -19,7 +19,7 @@ const partA = () => {
     const chunk = Buffer.alloc(64 * KB, 0x61);
     let falses = 0;
 
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 8; i++) {
         if (process.stderr.write(chunk) === false) {
             falses++;
         }
@@ -72,14 +72,14 @@ class TagStream extends Transform {
     }
 }
 
+// One burst, the way a config file that runs sass or webpack dumps its warnings: 128 writes of
+// 8 KB back to back, so the consumer of the parent's stderr cannot keep up with the arrival rate.
 const WRITER = `
 const chunk = Buffer.alloc(8192, 0x62).toString();
-let sent = 0;
-const timer = setInterval(() => {
-  if (sent >= 64) { clearInterval(timer); process.stdout.write(String(sent * 8192)); process.exit(0); }
+for (let i = 0; i < 128; i++) {
   process.stderr.write(chunk);
-  sent++;
-}, 2);
+}
+process.stdout.write(String(128 * 8192));
 `;
 
 const partB = async (waitForDrain) => {
@@ -125,13 +125,12 @@ process.stdout.write(JSON.stringify(report, null, 2) + '\n');
 const a = report.partA;
 const waiting = report.partB[0];
 
+// A parked transform leaves the child's stderr unread, so without an explicit exit the process
+// sits on open pipes. The exit waits for the write to flush, since stdout may be a pipe too.
 process.stdout.write(
     `\nSUMMARY ${os.platform()} node ${process.version} stderr ${a.isTTY ? 'tty' : 'not a tty'}: ` +
         `stderr backpressure ${a.falseReturns > 0 ? 'YES' : 'no'}, ` +
         `push() returned false ${waiting.pushReturnedFalse} times, ` +
         `transform parked ${waiting.parkedOnDrain ? 'YES' : 'no'}\n`,
+    () => process.exit(0),
 );
-
-// A parked transform leaves the child's stderr unread, so the process would otherwise
-// sit on open pipes once a CI runner is the one reading stderr.
-process.exit(0);
