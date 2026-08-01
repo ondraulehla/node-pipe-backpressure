@@ -107,6 +107,8 @@ const partB = async (waitForDrain) => {
     };
 
     child.kill('SIGKILL');
+    child.stderr.unpipe(ts);
+    ts.destroy();
 
     return result;
 };
@@ -129,3 +131,7 @@ process.stdout.write(
         `push() returned false ${waiting.pushReturnedFalse} times, ` +
         `transform parked ${waiting.parkedOnDrain ? 'YES' : 'no'}\n`,
 );
+
+// A parked transform leaves the child's stderr unread, so the process would otherwise
+// sit on open pipes once a CI runner is the one reading stderr.
+process.exit(0);
