@@ -16,7 +16,7 @@ const KB = 1024;
 
 // ---------- part A ----------
 const partA = () => {
-    const chunk = Buffer.alloc(64 * KB, 0x61);
+    const chunk = Buffer.alloc(16 * KB, 0x61).fill(0x0a, 16 * KB - 1);
     let falses = 0;
 
     for (let i = 0; i < 8; i++) {
@@ -72,14 +72,14 @@ class TagStream extends Transform {
     }
 }
 
-// One burst, the way a config file that runs sass or webpack dumps its warnings: 128 writes of
-// 8 KB back to back, so the consumer of the parent's stderr cannot keep up with the arrival rate.
+// One burst, the way a config file that runs sass or webpack dumps its warnings: 48 writes of
+// 4 KB back to back, so the consumer of the parent's stderr cannot keep up with the arrival rate.
 const WRITER = `
-const chunk = Buffer.alloc(8192, 0x62).toString();
-for (let i = 0; i < 128; i++) {
+const chunk = Buffer.alloc(4096, 0x62).fill(0x0a, 4095).toString();
+for (let i = 0; i < 48; i++) {
   process.stderr.write(chunk);
 }
-process.stdout.write(String(128 * 8192));
+process.stdout.write(String(48 * 4096));
 `;
 
 const partB = async (waitForDrain) => {
@@ -95,7 +95,7 @@ const partB = async (waitForDrain) => {
     // the shape used by packages/data-context/src/data/ProjectConfigIpc.ts
     child.stderr.pipe(ts).pipe(process.stderr);
 
-    await sleep(4000);
+    await sleep(2500);
 
     const result = {
         variant: waitForDrain ? 'waits for drain' : 'no wait',
